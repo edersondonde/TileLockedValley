@@ -118,6 +118,14 @@ namespace TileLocked.Config
         setValue: value => PerSaveConfig.Set(PerSaveConfig.Key.NUM_BONUS_TILES_FOR_CC_BUNDLES, value.ToString(), helper),
         min: 0
       );
+      configMenu.AddNumberOption(
+        mod: modManifest,
+        name: () => "Bonus tiles for museum donations",
+        tooltip: () => "The number of additional bonus tiles received when donating a new item to the museum.",
+        getValue: () => PerSaveConfig.GetInt(PerSaveConfig.Key.NUM_BONUS_TILES_FOR_MUSEUM_ITEMS),
+        setValue: value => PerSaveConfig.Set(PerSaveConfig.Key.NUM_BONUS_TILES_FOR_MUSEUM_ITEMS, value.ToString(), helper),
+        min: 0
+      );
     }
   }
 }

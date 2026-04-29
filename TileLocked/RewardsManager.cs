@@ -1,7 +1,9 @@
+using Microsoft.Xna.Framework;
 using StardewValley;
 using StardewValley.Locations;
 using TileLocked.Config;
 using xTile.Tiles;
+using System.Linq;
 
 namespace TileLocked
 {
@@ -9,8 +11,10 @@ namespace TileLocked
   {
     private readonly int[] VAULT_BUNDLE_KEYS = new int[] {23, 24, 25, 26};
     private readonly Dictionary<int, bool[]> bundleState = new();
+    private int museumItemCount = 0;
     private readonly TileManager tileManager;
     private CommunityCenter? communityCenter;
+    private LibraryMuseum? museum;
 
     public RewardsManager(TileManager tileManager)
     {
@@ -20,7 +24,9 @@ namespace TileLocked
     public void Initialize()
     {
       communityCenter = Game1.getLocationFromName("CommunityCenter") as CommunityCenter;
+      museum = Game1.getLocationFromName("ArchaeologyHouse") as LibraryMuseum;
       UpdateBundleState();
+      UpdateMuseumState();
     }
 
     public void CheckForChanges()
@@ -29,6 +35,12 @@ namespace TileLocked
       {
         CheckForBundleChanges(communityCenter);
         UpdateBundleState();
+      }
+
+      if (museum != null)
+      {
+        CheckForMuseumDonations(museum);
+        UpdateMuseumState();
       }
     }
 
@@ -52,14 +64,24 @@ namespace TileLocked
               // Workaround for vault bundles
               if (slots.All(slot => slot) || VAULT_BUNDLE_KEYS.Contains(kvp.Key))
               {
-                tileManager.AddBankedTiles(PerSaveConfig.GetInt(PerSaveConfig.Key.NUM_BONUS_TILES_FOR_CC_BUNDLES));
+                if (PerSaveConfig.GetInt(PerSaveConfig.Key.NUM_BONUS_TILES_FOR_CC_BUNDLES) > 0)
+                {
+                  tileManager.AddBankedTiles(PerSaveConfig.GetInt(PerSaveConfig.Key.NUM_BONUS_TILES_FOR_CC_BUNDLES));
+                }
+                else if (PerSaveConfig.GetInt(PerSaveConfig.Key.NUM_BONUS_TILES_FOR_CC_ITEMS) > 0)
+                {
+                  tileManager.AddBankedTiles(slots.Length * PerSaveConfig.GetInt(PerSaveConfig.Key.NUM_BONUS_TILES_FOR_CC_ITEMS));
+                }
                 UpdateBundleState();
                 bundleComplete = true;
               }
             }
             if (!bundleComplete)
             {
-              tileManager.AddBankedTiles(PerSaveConfig.GetInt(PerSaveConfig.Key.NUM_BONUS_TILES_FOR_CC_ITEMS));
+              if (PerSaveConfig.GetInt(PerSaveConfig.Key.NUM_BONUS_TILES_FOR_CC_ITEMS) > 0)
+              {
+                tileManager.AddBankedTiles(PerSaveConfig.GetInt(PerSaveConfig.Key.NUM_BONUS_TILES_FOR_CC_ITEMS));
+              }
               UpdateBundleState();
             }
           }
@@ -76,6 +98,27 @@ namespace TileLocked
         {
           bundleState[kvp.Key] = (bool[])kvp.Value.Clone();
         }
+      }
+    }
+
+    private void CheckForMuseumDonations(LibraryMuseum museum)
+    {
+      int currentItemCount = museum.museumPieces.Count();
+      if (currentItemCount > museumItemCount)
+      {
+        int newItemsCount = currentItemCount - museumItemCount;
+        if (PerSaveConfig.GetInt(PerSaveConfig.Key.NUM_BONUS_TILES_FOR_MUSEUM_ITEMS) > 0)
+        {
+          tileManager.AddBankedTiles(newItemsCount * PerSaveConfig.GetInt(PerSaveConfig.Key.NUM_BONUS_TILES_FOR_MUSEUM_ITEMS));
+        }
+      }
+    }
+
+    private void UpdateMuseumState()
+    {
+      if (museum != null)
+      {
+        museumItemCount = Math.Max(museumItemCount, museum.museumPieces.Count());
       }
     }
   }
