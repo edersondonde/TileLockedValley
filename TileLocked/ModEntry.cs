@@ -1,4 +1,3 @@
-using Microsoft.Xna.Framework;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
@@ -16,21 +15,25 @@ namespace TileLocked
     private ConfigMenuRegistrar configMenuRegistrar;
     private RewardsManager rewardsManager;
     private TileManager tileManager;
+    private PlayerManager playerManager;
+    private InputManager inputManager;
+    private MultiplayerManager multiplayerManager;
     private TileOverlayRenderer tileOverlayRenderer;
     private TileInfoRenderer tileInfoRenderer;
     private UnveilingGlassTooltipRenderer unveilingGlassTooltipRenderer;
 #pragma warning restore CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring as nullable.
-    private string? lastPlayerLocation = null;
-    private Vector2? lastPlayerPosition = null;
-    private Vector2? lastHoveredTile = null;
 
     public override void Entry(IModHelper helper)
     {
       tileManager = new(helper);
       rewardsManager = new(tileManager);
       config = helper.ReadConfig<ModConfig>();
+
       configMenuRegistrar = new ConfigMenuRegistrar(helper, ModManifest, config);
       tileOverlayRenderer = new(config, tileManager);
+      inputManager = new(config, tileManager, tileOverlayRenderer);
+      playerManager = new(tileManager);
+      multiplayerManager = new(helper, ModManifest, tileManager);
       tileInfoRenderer = new(tileManager);
       unveilingGlassTooltipRenderer = new(tileManager);
 
@@ -68,7 +71,7 @@ namespace TileLocked
     private void OnRenderedHud(object? sender, RenderedHudEventArgs e)
     {
       tileInfoRenderer.OnRenderedHud();
-      unveilingGlassTooltipRenderer.OnRenderedHud(lastHoveredTile);
+      unveilingGlassTooltipRenderer.OnRenderedHud(inputManager.LastHoveredTile);
     }
 
     private void OnRenderingHud(object? sender, RenderingHudEventArgs e)
@@ -111,13 +114,7 @@ namespace TileLocked
 
     private void OnDayStarted(object? sender, DayStartedEventArgs e)
     {
-      lastPlayerLocation = TileManager.GetLocationKey(Game1.currentLocation);
-      lastPlayerPosition = Game1.player.Position;
-
-      if (!tileManager.IsTileUnlocked(Game1.currentLocation, Game1.player.Tile))
-      {
-        PurchaseCurrentTilesOrWarpHome();
-      }
+      playerManager.OnDayStarted(sender, e);
     }
 
     private void OnUpdateTicked(object? sender, UpdateTickedEventArgs e)
@@ -126,196 +123,39 @@ namespace TileLocked
 
       if (Context.IsMainPlayer)
       {
-        rewardsManager.CheckForChanges();
+          rewardsManager.CheckForChanges();
       }
 
-      if (lastPlayerLocation == null
-          || lastPlayerPosition == null
-          || Game1.player.Position == lastPlayerPosition)
-        return;
-
-      string location = TileManager.GetLocationKey(Game1.currentLocation);
-      if (location != lastPlayerLocation)
-      {
-        if (!tileManager.IsTileUnlocked(Game1.currentLocation, Game1.player.Tile))
-        {
-          PurchaseCurrentTilesOrWarpHome();
-          lastPlayerLocation = location;
-          lastPlayerPosition = Game1.player.Position;
-          return;
-        }
-      }
-
-      Rectangle playerBox = Game1.player.GetBoundingBox();
-
-      // If locked tile is more than 1 away from previous tile, assume this was a warp
-      if (IsPlayerBoxInLockedTile(playerBox)
-          && lastPlayerPosition != null
-          && Vector2.Distance(Game1.player.position.Get(), lastPlayerPosition.Value) > 64)
-      {
-        if (!tileManager.IsTileUnlocked(Game1.currentLocation, Game1.player.Tile))
-        {
-          PurchaseCurrentTilesOrWarpHome();
-          lastPlayerLocation = location;
-          lastPlayerPosition = Game1.player.Position;
-          return;
-        }
-      }
-
-      // Prevent player from walking into locked tiles
-      if (IsPlayerBoxInLockedTile(playerBox) && lastPlayerPosition != null)
-      {
-        int deltaX = Convert.ToInt32(Game1.player.position.X - lastPlayerPosition.Value.X);
-        int deltaY = Convert.ToInt32(Game1.player.position.Y - lastPlayerPosition.Value.Y);
-        Rectangle xOnlyPlayerBox = new(playerBox.X, playerBox.Y - deltaY, playerBox.Width, playerBox.Height);
-        Rectangle yOnlyPlayerBox = new(playerBox.X - deltaX, playerBox.Y, playerBox.Width, playerBox.Height);
-        if (!IsPlayerBoxInLockedTile(xOnlyPlayerBox))
-        {
-          Game1.player.Position -= new Vector2(0, deltaY);
-        }
-        else if (!IsPlayerBoxInLockedTile(yOnlyPlayerBox))
-        {
-          Game1.player.Position -= new Vector2(deltaX, 0);
-        }
-        else
-        {
-          Game1.player.Position = (Vector2)lastPlayerPosition;
-        }
-      }
-
-      lastPlayerLocation = location;
-      lastPlayerPosition = Game1.player.Position;
+      playerManager.OnUpdateTicked(sender, e);
     }
 
     private void OnButtonPressed(object? sender, ButtonPressedEventArgs e)
     {
       if (!Context.IsWorldReady) return;
 
-      Item? activeItem = Game1.player.ActiveItem;
-      if (e.Button.IsActionButton()
-          && activeItem != null
-          && activeItem.ItemId.Equals(TileLockedConstants.UNVEILING_GLASS_ITEM_NAME))
-      {
-        OnUseUnveilingGlass(sender, e);
-      }
-      else if (e.Button == config.TileOverlayToggleKeybind)
-      {
-        tileOverlayRenderer.ToggleOverlayMode();
-      }
+      inputManager.OnButtonPressed(sender, e);
     }
 
     private void OnCursorMoved(object? sender, CursorMovedEventArgs e)
     {
-      lastHoveredTile = e.NewPosition.Tile;
-    }
+      if (!Context.IsWorldReady) return;
 
-    private void OnPeerContextReceived(object? sender, PeerContextReceivedEventArgs e)
-    {
-      if (Context.IsMainPlayer)
-      {
-        Helper.Multiplayer.SendMessage(
-          tileManager.GetPeerConnectionMessage(),
-          PeerConnectionMessage.TYPE,
-          new[] { ModManifest.UniqueID },
-          new[] { e.Peer.PlayerID }
-        );
-      }
-    }
-
-    private void OnModMessageReceived(object? sender, ModMessageReceivedEventArgs e)
-    {
-      if (e.FromModID != ModManifest.UniqueID)
-        return;
-      
-      switch (e.Type)
-      {
-        case PeerConnectionMessage.TYPE:
-          PeerConnectionMessage peerConnectionMessage = e.ReadAs<PeerConnectionMessage>();
-          tileManager.LoadFromPeerConnectionMessage(peerConnectionMessage);
-          break;
-        case TileUnlockedMessage.TYPE:
-          TileUnlockedMessage tileUnlockedMessage = e.ReadAs<TileUnlockedMessage>();
-          tileManager.TileUnlocked(tileUnlockedMessage);
-          break;
-        case BankedTilesAddedMessage.TYPE:
-          BankedTilesAddedMessage bankedTilesAddedMessage = e.ReadAs<BankedTilesAddedMessage>();
-          tileManager.BankedTilesAdded(bankedTilesAddedMessage.quantity);
-          break;
-        case BankedTileUsedMessage.TYPE:
-          tileManager.BankedTileUsed();
-          break;
-        case PerSaveConfigUpdateMessage.TYPE:
-          PerSaveConfigUpdateMessage perSaveConfigUpdateMessage = e.ReadAs<PerSaveConfigUpdateMessage>();
-          PerSaveConfig.Set(perSaveConfigUpdateMessage.key, perSaveConfigUpdateMessage.value);
-          break;
-      }
-    }
-
-    private void OnUseUnveilingGlass(object? sender, ButtonPressedEventArgs e)
-    {
-      Vector2 tile = e.Cursor.Tile;
-      GameLocation location = Game1.currentLocation;
-
-      if (!tileManager.IsTileUnlocked(location, tile))
-      {
-        tileManager.TryPurchaseTile(location, tile);
-      }
+      inputManager.OnCursorMoved(sender, e);
     }
 
     private void OnRenderedWorld(object? sender, RenderedWorldEventArgs e)
     {
-      tileOverlayRenderer.OnRenderedWorld(e, lastHoveredTile);
+      tileOverlayRenderer.OnRenderedWorld(e, inputManager.LastHoveredTile);
     }
 
-    private void PurchaseCurrentTilesOrWarpHome()
+    private void OnModMessageReceived(object? sender, ModMessageReceivedEventArgs e)
     {
-      Rectangle playerBox = Game1.player.GetBoundingBox();
-      List<Vector2> currentTiles = new()
-      {
-        // Top left
-        new Vector2(playerBox.Left / Game1.tileSize, playerBox.Top / Game1.tileSize),
-        // Top right
-        new Vector2((playerBox.Right - 1) / Game1.tileSize, playerBox.Top / Game1.tileSize),
-        // Bottom left
-        new Vector2(playerBox.Left / Game1.tileSize, (playerBox.Bottom - 1) / Game1.tileSize),
-        // Bottom right
-        new Vector2((playerBox.Right - 1) / Game1.tileSize, (playerBox.Bottom - 1) / Game1.tileSize)
-      };
-
-      foreach (Vector2 tile in currentTiles)
-      {
-        if (tileManager.IsTileUnlocked(Game1.currentLocation, tile))
-          continue;
-        
-        if (tileManager.TryPurchaseTile(Game1.currentLocation, tile))
-        {
-          continue;
-        }
-        else if (PerSaveConfig.GetBool(PerSaveConfig.Key.KNOCK_OUT_ON_FAILED_UNLOCK_ATTEMPT))
-        {
-          Game1.addHUDMessage(new HUDMessage("Tried to visit a tile you can't afford. Good night...", HUDMessage.error_type));
-          Game1.player.stamina = -15;
-          return;
-        }
-        else {
-          Game1.addHUDMessage(new HUDMessage("Tried to visit a tile you can't afford. A bonus tile was given to use instead.", HUDMessage.error_type));
-          tileManager.AddBankedTiles(1);
-          tileManager.TryPurchaseTile(Game1.currentLocation, tile);
-        }
-      }
+      multiplayerManager.OnModMessageReceived(sender, e);
     }
 
-    private bool IsPlayerBoxInLockedTile(Rectangle playerBox)
+    private void OnPeerContextReceived(object? sender, PeerContextReceivedEventArgs e)
     {
-      var topLeft = new Vector2(playerBox.Left / Game1.tileSize, playerBox.Top / Game1.tileSize);
-      var topRight = new Vector2((playerBox.Right - 1) / Game1.tileSize, playerBox.Top / Game1.tileSize);
-      var bottomLeft = new Vector2(playerBox.Left / Game1.tileSize, (playerBox.Bottom - 1) / Game1.tileSize);
-      var bottomRight = new Vector2((playerBox.Right - 1) / Game1.tileSize, (playerBox.Bottom - 1) / Game1.tileSize);
-
-      return !tileManager.IsTileUnlocked(Game1.currentLocation, topLeft)
-          || !tileManager.IsTileUnlocked(Game1.currentLocation, topRight)
-          || !tileManager.IsTileUnlocked(Game1.currentLocation, bottomLeft)
-          || !tileManager.IsTileUnlocked(Game1.currentLocation, bottomRight);
+      multiplayerManager.OnPeerContextReceived(sender, e);
     }
   }
 }
