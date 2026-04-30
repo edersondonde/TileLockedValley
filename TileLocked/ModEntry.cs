@@ -2,7 +2,6 @@ using Microsoft.Xna.Framework;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
-using StardewValley.Locations;
 using TileLocked.Config;
 using TileLocked.Multiplayer;
 using TileLocked.Rendering;
@@ -11,10 +10,6 @@ namespace TileLocked
 {
   public class ModEntry : Mod
   {
-    private const int HOME_TILE_X = 64;
-    private const int HOME_TILE_Y = 15;
-    private const bool ALLOW_HIDING_PLAYER = true;
-
     private ModConfig config = new();
 #pragma warning disable CS8618 // Non-nullable field must contain a non-null value when exiting constructor. Consider adding the 'required' modifier or declaring as nullable.
 
@@ -28,7 +23,6 @@ namespace TileLocked
     private string? lastPlayerLocation = null;
     private Vector2? lastPlayerPosition = null;
     private Vector2? lastHoveredTile = null;
-    private readonly Dictionary<int, bool[]> bundleState = new();
 
     public override void Entry(IModHelper helper)
     {
@@ -117,14 +111,11 @@ namespace TileLocked
 
     private void OnDayStarted(object? sender, DayStartedEventArgs e)
     {
-      LogInfo("OnDayStarted");
-
       lastPlayerLocation = TileManager.GetLocationKey(Game1.currentLocation);
       lastPlayerPosition = Game1.player.Position;
 
       if (!tileManager.IsTileUnlocked(Game1.currentLocation, Game1.player.Tile))
       {
-        LogDebug("Starting tile is not purchased yet.");
         PurchaseCurrentTilesOrWarpHome();
       }
     }
@@ -146,10 +137,8 @@ namespace TileLocked
       string location = TileManager.GetLocationKey(Game1.currentLocation);
       if (location != lastPlayerLocation)
       {
-        LogDebug("Warped to new location.");
         if (!tileManager.IsTileUnlocked(Game1.currentLocation, Game1.player.Tile))
         {
-          LogDebug("Warped to tile is not purchased yet.");
           PurchaseCurrentTilesOrWarpHome();
           lastPlayerLocation = location;
           lastPlayerPosition = Game1.player.Position;
@@ -164,10 +153,8 @@ namespace TileLocked
           && lastPlayerPosition != null
           && Vector2.Distance(Game1.player.position.Get(), lastPlayerPosition.Value) > 64)
       {
-        LogDebug("Player moved far enough to be considered a warp.");
         if (!tileManager.IsTileUnlocked(Game1.currentLocation, Game1.player.Tile))
         {
-          LogDebug("Warped to tile is not purchased yet.");
           PurchaseCurrentTilesOrWarpHome();
           lastPlayerLocation = location;
           lastPlayerPosition = Game1.player.Position;
@@ -178,7 +165,6 @@ namespace TileLocked
       // Prevent player from walking into locked tiles
       if (IsPlayerBoxInLockedTile(playerBox) && lastPlayerPosition != null)
       {
-        LogDebug("Player moved to locked tile. Moving player back.");
         int deltaX = Convert.ToInt32(Game1.player.position.X - lastPlayerPosition.Value.X);
         int deltaY = Convert.ToInt32(Game1.player.position.Y - lastPlayerPosition.Value.Y);
         Rectangle xOnlyPlayerBox = new(playerBox.X, playerBox.Y - deltaY, playerBox.Width, playerBox.Height);
@@ -205,10 +191,7 @@ namespace TileLocked
     {
       if (!Context.IsWorldReady) return;
 
-      LogInfo("OnButtonPressed: " + e.Button.ToString());
-
       Item? activeItem = Game1.player.ActiveItem;
-      LogDebug("Active item: " + activeItem?.ItemId);
       if (e.Button.IsActionButton()
           && activeItem != null
           && activeItem.ItemId.Equals(TileLockedConstants.UNVEILING_GLASS_ITEM_NAME))
@@ -218,10 +201,6 @@ namespace TileLocked
       else if (e.Button == config.TileOverlayToggleKeybind)
       {
         tileOverlayRenderer.ToggleOverlayMode();
-      }
-      else if (e.Button == SButton.P && ALLOW_HIDING_PLAYER)
-      {
-        Game1.displayFarmer = !Game1.displayFarmer;
       }
     }
 
@@ -274,27 +253,13 @@ namespace TileLocked
 
     private void OnUseUnveilingGlass(object? sender, ButtonPressedEventArgs e)
     {
-      LogInfo("OnUseUnveilingGlass");
-
       Vector2 tile = e.Cursor.Tile;
       GameLocation location = Game1.currentLocation;
-      bool isMineshaft = location is MineShaft;
 
-      LogDebug("Current location: " + location.Name);
-      LogDebug("Map path: " + location.mapPath.Value);
-      LogDebug("Is Mineshaft: " + isMineshaft);
-      LogDebug("Clicked tile: " + tile);
-
-      if (tileManager.IsTileUnlocked(location, tile))
+      if (!tileManager.IsTileUnlocked(location, tile))
       {
-        LogDebug("Tile already unlocked: " + tile);
-        return;
+        tileManager.TryPurchaseTile(location, tile);
       }
-
-      if (tileManager.TryPurchaseTile(location, tile))
-        LogDebug("Tile purchased: " + tile);
-      else
-        LogDebug("Failed to purchase tile.");
     }
 
     private void OnRenderedWorld(object? sender, RenderedWorldEventArgs e)
@@ -322,10 +287,9 @@ namespace TileLocked
         if (tileManager.IsTileUnlocked(Game1.currentLocation, tile))
           continue;
         
-        LogDebug("Attempting to purchase tile: " + tile);
         if (tileManager.TryPurchaseTile(Game1.currentLocation, tile))
         {
-          LogDebug("Tile purchased.");
+          continue;
         }
         else if (PerSaveConfig.GetBool(PerSaveConfig.Key.KNOCK_OUT_ON_FAILED_UNLOCK_ATTEMPT))
         {
@@ -352,16 +316,6 @@ namespace TileLocked
           || !tileManager.IsTileUnlocked(Game1.currentLocation, topRight)
           || !tileManager.IsTileUnlocked(Game1.currentLocation, bottomLeft)
           || !tileManager.IsTileUnlocked(Game1.currentLocation, bottomRight);
-    }
-
-    private void LogDebug(string message)
-    {
-      Monitor.Log(message, LogLevel.Debug);
-    }
-
-    private void LogInfo(string message)
-    {
-      Monitor.Log(message, LogLevel.Info);
     }
   }
 }
