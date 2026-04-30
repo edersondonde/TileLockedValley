@@ -24,7 +24,7 @@ namespace TileLocked
     public void OnButtonPressed(object? sender, ButtonPressedEventArgs e)
     {
       Item? activeItem = Game1.player.ActiveItem;
-      if (e.Button.IsActionButton()
+      if (e.Button == config.UnlockTileKeybind
           && activeItem != null
           && activeItem.ItemId.Equals(TileLockedConstants.UNVEILING_GLASS_ITEM_NAME))
       {

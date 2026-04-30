@@ -50,7 +50,14 @@ namespace TileLocked.Config
         setValue: value => config.NumBonusTilesForNewFarmers = value,
         min: 0
       );
-      configMenu.AddSectionTitle(modManifest, () => "Tile Overlay");
+      configMenu.AddSectionTitle(modManifest, () => "Input");
+      configMenu.AddKeybind(
+        mod: modManifest,
+        name: () => "Unlock tile",
+        tooltip: () => "Press this input to unlock the tile that the cursor is pointing at while holding the Unveiling Glass.",
+        getValue: () => config.UnlockTileKeybind,
+        setValue: value => config.UnlockTileKeybind = value
+      );
       configMenu.AddKeybind(
         mod: modManifest,
         name: () => "Tile overlay toggle",
@@ -58,6 +65,7 @@ namespace TileLocked.Config
         getValue: () => config.TileOverlayToggleKeybind,
         setValue: value => config.TileOverlayToggleKeybind = value
       );
+      configMenu.AddSectionTitle(modManifest, () => "Tile Overlay");
       configMenu.AddTextOption(
         mod: modManifest,
         name: () => "Locked tile overlay color",
