@@ -12,7 +12,7 @@ If you find a bug and want to file it to get fixed by me or the community, creat
 
 If you'd like to add a feature/fix a bug, create a pull request, and once approved and merged, it will go out with the next mod release.
 
-If you're not sure if a change is in scope for what will get approved, file an feature request and we can talk about it.
+If you're not sure if a change is in scope for what will get approved, file a feature request and we can talk about it.
 
 ## Download the mod
 
