@@ -38,6 +38,7 @@ namespace TileLocked
       unveilingGlassTooltipRenderer = new(tileManager);
 
       helper.Events.GameLoop.GameLaunched += OnGameLaunched;
+      helper.Events.GameLoop.ReturnedToTitle += OnReturnedToTitle;
       helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
       helper.Events.Multiplayer.ModMessageReceived += OnModMessageReceived;
 
@@ -79,6 +80,11 @@ namespace TileLocked
       tileInfoRenderer.OnRenderingHud();
     }
 
+    private void OnReturnedToTitle(object? sender, ReturnedToTitleEventArgs e)
+    {
+      configMenuRegistrar.InitializeConfigMenu();
+    }
+
     private void OnSaveLoaded(object? sender, SaveLoadedEventArgs e)
     {
       if (Context.IsMainPlayer && Game1.stats.DaysPlayed <= 1 && config.ModEnabledForNewSaves)
@@ -97,7 +103,7 @@ namespace TileLocked
         tileManager.AddBankedTiles(config.NumBonusTilesForNewFarmers);
         Game1.player.addItemToInventory(ItemRegistry.Create("(O)" + TileLockedConstants.UNVEILING_GLASS_ITEM_NAME));
       }
-      
+
       if (Context.IsMainPlayer)
       {
         tileManager.LoadData();
@@ -123,7 +129,7 @@ namespace TileLocked
 
       if (Context.IsMainPlayer)
       {
-          rewardsManager.CheckForChanges();
+        rewardsManager.CheckForChanges();
       }
 
       playerManager.OnUpdateTicked(sender, e);
