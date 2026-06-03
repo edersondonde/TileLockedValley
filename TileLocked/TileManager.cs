@@ -41,6 +41,10 @@ namespace TileLocked
       if (mapPath.Contains("Town")) {
         return "Town";
       }
+      if (mapPath.Contains("Desert"))
+      {
+        return "Desert";
+      }
 
       if (location is MineShaft mineShaft)
       {
